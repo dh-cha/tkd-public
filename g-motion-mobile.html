@@ -86,7 +86,11 @@
     }
 
     function detectMotion() {
+      bctx.save();
+      bctx.translate(canvas.width, 0);
+      bctx.scale(-1, 1);
       bctx.drawImage(video, 0, 0, buffer.width, buffer.height);
+      bctx.restore();
       const frame = bctx.getImageData(0, 0, buffer.width, buffer.height);
 
       if (prevFrame) {
@@ -150,3 +154,4 @@
   </script>
 </body>
 </html>
+
