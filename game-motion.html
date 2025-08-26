@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Webcam Motion Hit Test Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111827;
+      color: white;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    canvas {
+      border: 2px solid #444;
+      border-radius: 8px;
+    }
+    #controls {
+      margin-top: 10px;
+    }
+    button {
+      padding: 6px 12px;
+      margin: 0 5px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="960" height="540"></canvas>
+  <div id="controls">
+    <button id="startBtn">Start Camera</button>
+    <button id="stopBtn">Stop Camera</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const video = document.createElement('video');
+    let stream = null;
+    let running = false;
+
+    // Target for hit test
+    let target = { x: 200, y: 200, r: 60 };
+    let score = 0;
+
+    // Offscreen buffer for motion detection
+    const buffer = document.createElement('canvas');
+    const bctx = buffer.getContext('2d');
+    buffer.width = canvas.width;
+    buffer.height = canvas.height;
+    let prevFrame = null;
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        await video.play();
+        running = true;
+        loop();
+      } catch (err) {
+        alert('Error accessing camera: ' + err);
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+      running = false;
+    }
+
+    function detectMotion() {
+      // Draw current frame to buffer
+      bctx.save();
+      bctx.translate(canvas.width, 0);
+      bctx.scale(-1, 1);
+      bctx.drawImage(video, 0, 0, buffer.width, buffer.height);
+      const frame = bctx.getImageData(0, 0, buffer.width, buffer.height);
+      bctx.restore();
+
+      if (prevFrame) {
+        let motionX = 0, motionY = 0, count = 0;
+        for (let i = 0; i < frame.data.length; i += 4) {
+          const diff = Math.abs(frame.data[i] - prevFrame.data[i]) +
+                       Math.abs(frame.data[i+1] - prevFrame.data[i+1]) +
+                       Math.abs(frame.data[i+2] - prevFrame.data[i+2]);
+          if (diff > 60) {
+            const index = i / 4;
+            const x = index % buffer.width;
+            const y = Math.floor(index / buffer.width);
+            motionX += x;
+            motionY += y;
+            count++;
+          }
+        }
+        if (count > 500) { // enough pixels changed
+          const avgX = motionX / count;
+          const avgY = motionY / count;
+          const dx = avgX - target.x;
+          const dy = avgY - target.y;
+          if (dx*dx + dy*dy <= target.r*target.r) {
+            score++;
+            // move target randomly
+            target.x = Math.random() * (canvas.width-120) + 60;
+            target.y = Math.random() * (canvas.height-120) + 60;
+          }
+        }
+      }
+      prevFrame = frame;
+    }
+
+    function loop() {
+      if (!running) return;
+
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // Draw webcam feed mirrored
+      if (video.readyState >= 2) {
+        ctx.save();
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      // Draw target circle
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, target.r, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,0,0,0.6)';
+      ctx.fill();
+
+      // Draw score
+      ctx.fillStyle = 'white';
+      ctx.font = '20px sans-serif';
+      ctx.fillText('Score: ' + score, 20, 30);
+
+      detectMotion();
+      requestAnimationFrame(loop);
+    }
+
+    document.getElementById('startBtn').onclick = startCamera;
+    document.getElementById('stopBtn').onclick = stopCamera;
+  </script>
+</body>
+</html>
